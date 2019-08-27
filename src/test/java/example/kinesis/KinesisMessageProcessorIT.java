@@ -1,12 +1,16 @@
 package example.kinesis;
 
+import cloud.localstack.DockerTestUtils;
 import cloud.localstack.TestUtils;
 import cloud.localstack.docker.LocalstackDockerTestRunner;
 import cloud.localstack.docker.annotation.EC2HostNameResolver;
 import cloud.localstack.docker.annotation.LocalstackDockerProperties;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.model.*;
 import com.amazonaws.services.kinesis.AmazonKinesis;
 import com.amazonaws.services.kinesis.model.PutRecordRequest;
 import example.KinesisMessageProcessor;
+import org.awaitility.Duration;
 import org.junit.*;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +22,7 @@ import org.springframework.test.context.junit4.rules.SpringClassRule;
 import org.springframework.test.context.junit4.rules.SpringMethodRule;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.timeout;
@@ -65,13 +70,27 @@ public class KinesisMessageProcessorIT {
   }
 
   @Test
-  public void shouldProcessKinesisMessage() {
+  public void shouldProcessKinesisMessage() throws InterruptedException {
     givenThereIsAKinesisStream:
     {
       kinesisClient.createStream(streamName, 1);
       await().until(() ->
         kinesisClient.describeStream(streamName).getStreamDescription().getStreamStatus().equals("ACTIVE")
       );
+    }
+
+    //Need to wait before the ShardConsumer is created before we publish the data
+    //This is just to show how get data from Dynamodb
+    waitUntilShardConsumerIsRedyInitiated:
+    {
+      await()
+        .atLeast(Duration.ONE_HUNDRED_MILLISECONDS)
+        .atMost(Duration.TEN_MINUTES)
+        .with()
+        .pollInterval(Duration.ONE_HUNDRED_MILLISECONDS)
+        .until(() ->
+          DockerTestUtils.getClientDynamoDb().scan(new ScanRequest().withTableName("kinesis-with-localstack-example")).getCount().equals(1)
+        );
     }
 
     whenThereIsARecordInTheStream:

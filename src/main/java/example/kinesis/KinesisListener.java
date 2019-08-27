@@ -1,18 +1,19 @@
 package example.kinesis;
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker;
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.*;
+import com.google.errorprone.annotations.concurrent.LazyInit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.SmartLifecycle;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Slf4j
 @Component
+@Lazy
 public class KinesisListener implements SmartLifecycle {
 
   @Value("${kinesis.streamName}")
@@ -43,7 +44,9 @@ public class KinesisListener implements SmartLifecycle {
       kinesisStreamName,
       awsConfig.getCredentials(),
       workerId)
+      .withIdleTimeBetweenReadsInMillis(200L)
       .withMetricsLevel(awsConfig.getCloudWatchMetricsLevel())
+      .withShardSyncStrategyType(ShardSyncStrategyType.PERIODIC) //Without this the sharedConsumer was initated randomly
       .withInitialPositionInStream(InitialPositionInStream.TRIM_HORIZON);
 
     worker = new Worker.Builder()
